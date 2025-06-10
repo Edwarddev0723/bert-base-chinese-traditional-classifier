@@ -1,110 +1,169 @@
-# train.py
-"""
-模型訓練主程式與 Trainer 設定
-"""
-from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
-from transformers.integrations import WandbCallback
-import numpy as np
-from tokenizer_util import get_tokenizer, split_and_tokenize
-from data_prepare import prepare_dataset
+# filename: bert_plateau_trainer.py
+# pip install transformers wandb datasets accelerate
 
-try:
-    import wandb
-    WANDB_AVAILABLE = True
-except ImportError:
-    WANDB_AVAILABLE = False
+import math
+import wandb
+from typing import Dict, Any
+from datasets import DatasetDict
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    Trainer,
+    TrainingArguments,
+    SchedulerType
+)
 
-def main():
-    dataset, _ = prepare_dataset()
-    tokenizer = get_tokenizer()
-    encoded_dataset, df_train, df_val = split_and_tokenize(dataset, tokenizer)
-    labels_set = set(encoded_dataset["train"]["label"])
-    print("所有 label:", labels_set)
-    assert labels_set.issubset({0, 1, 2}), "labels 有超出 0/1/2 的數值"
-    print("有無 NaN:", np.isnan(encoded_dataset["train"]["label"]).any())
-    encoded_dataset = encoded_dataset.map(lambda x: {"label": int(x["label"])})
-    model = AutoModelForSequenceClassification.from_pretrained(
-        "ckiplab/bert-base-chinese",
-        num_labels=3,
-        hidden_dropout_prob=0.3,  # 適度防過擬合
+# --------------------------------------------------
+# 基本組件
+# --------------------------------------------------
+def init_wandb(project: str, run_name: str) -> None:
+    """啟動 Weights & Biases 追蹤"""
+    wandb.init(project=project, name=run_name, save_code=True)
+
+
+def get_tokenizer(model_name: str = "ckiplab/bert-base-chinese",
+                  cache_dir: str = "./hf_cache"):
+    """回傳 CKIP tokenizer（fast 版本）"""
+    return AutoTokenizer.from_pretrained(
+        model_name,
+        cache_dir=cache_dir,
+        use_fast=True
     )
-    import torch
-    # 順序偵測 mps > cuda > cpu
-    if torch.backends.mps.is_available():
-        device = torch.device("mps")
-        print("使用 MPS 裝置")
-        fp16 = False  # Apple Silicon 不支援 fp16
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
-        print("使用 CUDA GPU 裝置")
-        fp16 = True
-    else:
-        device = torch.device("cpu")
-        print("使用 CPU 裝置")
-        fp16 = False
 
-    model.to(device)
-    model.gradient_checkpointing_enable()
 
-    training_args = TrainingArguments(
-        output_dir="./model_ckpt",
-        do_train=True,
-        do_eval=True,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=64,
-        gradient_accumulation_steps=2,
-        num_train_epochs=3,
-        learning_rate=2e-5,
-        lr_scheduler_type="linear",
-        weight_decay=0.1,
-        warmup_ratio=0.06,
-        save_strategy="steps",         # 改為 "steps"
-        save_steps=1000,               # 每1000步存一次
-        logging_strategy="steps",
-        logging_steps=200,
-        eval_strategy="steps",         # 和 save 保持一致
-        eval_steps=1000,               # 每1000步驗證一次（和 save_steps 一樣）
-        save_total_limit=2,
-        fp16=fp16,                     # ⚠️ Apple Silicon 不支援 fp16
-        seed=42,
-        report_to=["wandb"] if WANDB_AVAILABLE else "none",
-        load_best_model_at_end=True,
+def get_model(num_labels: int = 3,
+              model_name: str = "ckiplab/bert-base-chinese"):
+    """建立分類模型（含 gradient checkpointing 以省顯存）"""
+    return AutoModelForSequenceClassification.from_pretrained(
+        model_name,
+        num_labels=num_labels,
+        hidden_dropout_prob=0.3,
+        torch_dtype="auto",
+        gradient_checkpointing=True
+    )
+
+
+def calc_training_steps(train_size: int,
+                        batch_size: int,
+                        grad_accum: int,
+                        epochs: int) -> Dict[str, int]:
+    """計算訓練相關步數"""
+    steps_per_epoch = math.ceil(train_size / (batch_size * grad_accum))
+    total_steps     = steps_per_epoch * epochs
+    warmup_steps    = int(0.1 * total_steps)
+    return {
+        "steps_per_epoch": steps_per_epoch,
+        "total_steps": total_steps,
+        "warmup_steps": warmup_steps
+    }
+
+
+def build_training_args(output_dir: str,
+                        steps_cfg: Dict[str, int],
+                        batch_size: int,
+                        grad_accum: int,
+                        epochs: int) -> TrainingArguments:
+    """建立 ReduceLROnPlateau 版本 TrainingArguments"""
+    return TrainingArguments(
+        output_dir=output_dir,
+        overwrite_output_dir=True,
+
+        # —— 調度器設定 —— #
+        lr_scheduler_type=SchedulerType.REDUCE_ON_PLATEAU,
+        lr_scheduler_factor=0.5,
+        lr_scheduler_patience=1,
+        lr_scheduler_threshold=1e-4,
+        lr_scheduler_threshold_mode="rel",
+        lr_scheduler_min_lr=1e-7,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        disable_tqdm=False,
-        max_grad_norm=1.0,
+
+        # —— 基本訓練 —— #
+        num_train_epochs=epochs,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size * 2,
+        gradient_accumulation_steps=grad_accum,
+        learning_rate=2e-5,
+        warmup_steps=steps_cfg["warmup_steps"],
+        weight_decay=0.01,
+
+        # —— 紀錄與儲存 —— #
+        logging_strategy="steps",
+        logging_steps=max(1, steps_cfg["steps_per_epoch"] // 10),
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        load_best_model_at_end=True,
+
+        fp16=True,
+        seed=42,
+        dataloader_num_workers=4,
+        report_to="wandb",
+        disable_tqdm=False
     )
-    if WANDB_AVAILABLE:
-        # 直接於程式內設定 wandb 參數
-        wandb.init(
-            project="bert-zh-tw-classifier",
-            name="bert-zh-tw-run",
-            config={
-                "batch_size": 16,
-                "epochs": 3,
-                "learning_rate": 2e-5,
-                "model": "ckiplab/bert-base-chinese",
-                "max_length": 512,
-            }
-        )
-        print("已啟用 Weights & Biases 日誌紀錄。")
-    else:
-        print("未安裝 wandb，將不啟用 Weights & Biases 日誌。")
+
+
+# --------------------------------------------------
+# 高階封裝
+# --------------------------------------------------
+def train_with_plateau(dataset_dict: DatasetDict,
+                       project: str = "my-bert-chinese-project",
+                       run_name: str = "bert-plateau-run1",
+                       output_dir: str = "./model_ckpt",
+                       num_labels: int = 3,
+                       batch_size: int = 32,
+                       grad_accum: int = 2,
+                       epochs: int = 3) -> Trainer:
+    """
+    一行呼叫即可完成：
+      1. W&B 初始
+      2. tokenizer / model 建立
+      3. TrainingArguments（ReduceLROnPlateau）
+      4. Trainer  → start training
+    回傳已訓練完成的 Trainer 物件
+    """
+    # 1. W&B
+    init_wandb(project, run_name)
+
+    # 2. 模型與 tokenizer
+    tokenizer = get_tokenizer()
+    model     = get_model(num_labels=num_labels)
+
+    # 3. 步數計算
+    steps_cfg = calc_training_steps(
+        train_size=len(dataset_dict["train"]),
+        batch_size=batch_size,
+        grad_accum=grad_accum,
+        epochs=epochs
+    )
+
+    # 4. TrainingArguments
+    training_args = build_training_args(
+        output_dir=output_dir,
+        steps_cfg=steps_cfg,
+        batch_size=batch_size,
+        grad_accum=grad_accum,
+        epochs=epochs
+    )
+
+    # 5. Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=encoded_dataset["train"],
-        eval_dataset=encoded_dataset["validation"],
-        tokenizer=tokenizer,
-        callbacks=[WandbCallback()] if WANDB_AVAILABLE else None,
+        train_dataset=dataset_dict["train"],
+        eval_dataset=dataset_dict["validation"],
+        tokenizer=tokenizer
     )
-    trainer.train()
-    model.save_pretrained("./bert-zh-tw-classifier")
-    tokenizer.save_pretrained("./bert-zh-tw-classifier")
-    trainer.save_model("./model_ckpt")
-    tokenizer.save_pretrained("./model_ckpt")
-    print("訓練完成，模型已儲存。")
-    return trainer, encoded_dataset
 
+    trainer.train()
+    wandb.finish()
+    return trainer
+
+
+# --------------------------------------------------
+# CLI 測試
+# --------------------------------------------------
 if __name__ == "__main__":
-    main()
+    from datasets import load_from_disk
+    # 假設事先存好的 arrow 目錄
+    ds_dict = load_from_disk("data_cache/arrow_dataset")
+    train_with_plateau(ds_dict)
