@@ -103,7 +103,7 @@ def build_parquet(rows=150_000, out_dir="data_cache"):
     each = rows//2
     srcs = [
         ("voidful/fineweb-zhtw", "train", "norm", 1, "text"),
-        ("BAAI/CCI4.0-M2-Base-v1", "train", "simp2trad", 0, "content"),
+        ("austenjs/ClueCorpusSmallDataset", "train", "simp2trad", 0, "text"),
     ]
     parts = [prep(n, each, m, lab, sp, k) for n,sp,m,lab,k in srcs]
     full  = dedup(concatenate_datasets(parts))
