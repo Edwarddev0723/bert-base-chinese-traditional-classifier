@@ -16,6 +16,18 @@ warnings.filterwarnings("ignore", message="Token indices sequence length")
 NUM_PROC = min(8, mp.cpu_count()) if psutil.virtual_memory().total/2**30 >= 16 else 4
 _SENT_BOUND = re.compile(r"([。！？；…]+)")
 
+# === CLEANING ===
+MIN_LEN       = 10       # 最少字數
+MIN_ZH_RATIO  = 0.30     # 中文占比下限
+_RE_WEIRD     = re.compile(r'[^a-zA-Z0-9\u4e00-\u9fff\s\.\,\!\?！？。，「」％%：:\-／/~@#\(\)《》<>]')
+_RE_ZH        = re.compile(r'[\u4e00-\u9fff]')
+
+def _zh_ratio(t: str) -> float:
+    return len(_RE_ZH.findall(t)) / max(len(t), 1)
+
+def _clean(t: str) -> str:
+    return _RE_WEIRD.sub('', t)
+    
 # ---------- OpenCC ----------
 @lru_cache(maxsize=None)
 def _cc(table):  # lazy share across workers
