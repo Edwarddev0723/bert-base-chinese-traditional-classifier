@@ -76,9 +76,16 @@ def prep(name, rows, mode, label, split, key):
     ds  = ds.map(lambda b: {"text": b["chunks"]})\
              .remove_columns("chunks")    # 改欄名並刪舊欄
 
-    ds  = ds.filter(lambda ex: len(ex["text"]) >= 10)
+    # === CLEANING｜移除非法符號、過短、低中文比例 ===
+    ds  = ds.map(lambda b: {"text": [_clean(t) for t in b["text"]]},
+                 batched=True, batch_size=BATCH, num_proc=NUM_PROC)
 
-    # 4. 現在 rows 與 text 1:1，可安全加 label
+    ds  = ds.filter(
+            lambda ex: len(ex["text"]) >= MIN_LEN and _zh_ratio(ex["text"]) >= MIN_ZH_RATIO,
+            num_proc=NUM_PROC
+         )
+
+    # 4. 加入 label
     ds  = ds.add_column("label", [label] * len(ds))
     return ds
 
