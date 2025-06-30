@@ -1,6 +1,6 @@
 # BERT Chinese Traditional-Simplified Classifier
 
-A robust, modular pipeline for classifying Chinese text as **Simplified**, **Traditional**, or **Hybrid** using BERT-based sequence models.
+A modular pipeline for labeling Chinese text as **Simplified**, **Traditional**, or **Hybrid**. The project provides command line tools for dataset creation, tokenization, and BERT fine‑tuning.
 
 **[Demo Model on Hugging Face →](https://huggingface.co/renhehuang/bert-base-chinese-traditional-classifier-v3)**
 
@@ -8,16 +8,27 @@ A robust, modular pipeline for classifying Chinese text as **Simplified**, **Tra
 
 ## Features
 
-
+- **Configurable dataset builder** (`data_prepare.py`)
+- **Tokenization & train/val split utility** (`tokenizer_util.py`)
+- **Robust BERT training CLI** (`train.py`)
+- Evaluation and inference helpers
 
 ---
 
 ## Project Structure
 
 ```
-bert-chinese-classifier/
-│
-
+bert-base-chinese-traditional-classifier/
+├── assets/                # images and diagrams
+├── src/                   # CLI tools and utilities
+│   ├── data_prepare.py
+│   ├── tokenizer_util.py
+│   ├── train.py
+│   ├── evaluate.py
+│   ├── push_to_hub.py
+│   └── test_inference.py
+├── requirements.txt
+└── README.md
 ```
 
 ---
@@ -25,40 +36,53 @@ bert-chinese-classifier/
 ## Installation
 
 ```bash
-
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Training Pipeline
+### 1. Build the Dataset
 
-```python
-
-```
-
-Or simply run:
+Use the parameter driven dataset builder. CLI flags or a YAML/JSON config may override any hyper‑parameter.
 
 ```bash
-
+python data_prepare.py \
+    --rows 200000 \
+    --out_dir data_cache_v2 \
+    --min_zh_ratio 0.2
+# or
+python data_prepare.py --config configs/cci3.yaml
 ```
 
----
+### 2. Tokenize & Split
 
+```bash
+python tokenizer_util.py \
+  --input fineweb.parquet \
+  --out_dir data_cache_v2 \
+  --model ckiplab/bert-base-chinese \
+  --max_len 256 --stride 128 --test_size 0.2
+```
 
+### 3. Train the Model
 
-### 3. Uploading Your Own Model to Hugging Face
+```bash
+python train.py -d data_cache_v2 -o ckpt --rows 5000 \
+  --project myproj --run debug-5k
+```
 
-After training, push to Hugging Face with:
+### 4. Evaluate & Inference
+
+Run `evaluate.py` or `test_inference.py` for reporting and prediction demos.
+
+### 5. Upload to Hugging Face
 
 ```python
-from src.upload_hf import upload_to_hf
-
-upload_to_hf(
-    model_dir="./model_ckpt",
-    repo_id="renhehuang/bert-base-chinese-traditional-classifier-v3",
-    private=False
-)
+from src.push_to_hub import push_model
+push_model(repo_id="renhehuang/bert-base-chinese-traditional-classifier-v3", model_dir="./model_ckpt")
 ```
 
