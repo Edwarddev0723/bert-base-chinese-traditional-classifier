@@ -2,8 +2,6 @@
 
 A modular pipeline for labeling Chinese text as **Simplified**, **Traditional**, or **Hybrid**. The project provides command line tools for dataset creation, tokenization, and BERT fine‑tuning.
 
-**[Demo Model on Hugging Face →](https://huggingface.co/renhehuang/bert-base-chinese-traditional-classifier-v3)**
-
 ---
 
 ## Features
