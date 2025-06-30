@@ -1,4 +1,4 @@
-# build_dataset.py
+# data_prepare.py
 """
 Dataset Builder – configurable version
 ====================================
@@ -10,16 +10,16 @@ You can override **every** important hyper‑parameter either:
 Typical usage
 -------------
 # simplest – rely on defaults
-python build_dataset.py
+python data_prepare.py
 
 # override a few knobs
-python build_dataset.py \
+python data_prepare.py \
     --rows 200000 \
     --out_dir data_cache_v2 \
     --min_zh_ratio 0.2
 
 # drive everything from a config file
-python build_dataset.py --config configs/cci3.yaml
+python data_prepare.py --config configs/cci3.yaml
 """
 
 from __future__ import annotations

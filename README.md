@@ -1,40 +1,32 @@
 # BERT Chinese Traditional-Simplified Classifier
 
-A robust, modular pipeline for classifying Chinese text as **Simplified**, **Traditional**, or **Hybrid** using BERT-based sequence models.
-
-**[Demo Model on Hugging Face →](https://huggingface.co/renhehuang/bert-base-chinese-traditional-classifier-v3)**
+A modular pipeline for labeling Chinese text as **Simplified**, **Traditional**, or **Hybrid**. The project provides command line tools for dataset creation, tokenization, and BERT fine‑tuning.
 
 ---
 
 ## Features
 
-- **Automatic sampling** from major open Chinese web corpora
-- **Hybrid text generation** by segmenting and mixing simplified/traditional characters
-- **Customizable, object-oriented pipeline** for end-to-end data, model, and analysis workflow
-- **Classification for three classes**: Simplified, Traditional, Hybrid
-- **Extensive error analysis** and visualization
-- **Easy model sharing via Hugging Face Hub**
+- **Configurable dataset builder** (`data_prepare.py`)
+- **Tokenization & train/val split utility** (`tokenizer_util.py`)
+- **Robust BERT training CLI** (`train.py`)
+- Evaluation and inference helpers
 
 ---
 
 ## Project Structure
 
 ```
-bert-chinese-classifier/
-│
-├── README.md
+bert-base-chinese-traditional-classifier/
+├── assets/                # images and diagrams
+├── src/                   # CLI tools and utilities
+│   ├── data_prepare.py
+│   ├── tokenizer_util.py
+│   ├── train.py
+│   ├── evaluate.py
+│   ├── push_to_hub.py
+│   └── test_inference.py
 ├── requirements.txt
-├── .gitignore
-│
-├── data_fun.py
-├── src/
-│   ├── pipeline.py
-│   └── upload_hf.py
-├── main.py
-├── tests/
-│   └── test_pipeline.py
-└── examples/
-    └── train_and_eval_example.ipynb
+└── README.md
 ```
 
 ---
@@ -42,8 +34,8 @@ bert-chinese-classifier/
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/bert-chinese-classifier.git
-cd bert-chinese-classifier
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -51,118 +43,44 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-### 1. Training Pipeline
+### 1. Build the Dataset
 
-```python
-from data_fun import prepare_dataset
-from src.pipeline import TextClassifierPipeline
-
-pipeline = TextClassifierPipeline()
-pipeline.prepare_data(prepare_dataset_func=prepare_dataset)
-pipeline.setup_model()
-pipeline.train()
-y_true, y_pred, cm, report = pipeline.evaluate()
-pipeline.visualize_confusion_matrix(cm)
-pipeline.error_analysis(y_true, y_pred)
-```
-
-Or simply run:
+Use the parameter driven dataset builder. CLI flags or a YAML/JSON config may override any hyper‑parameter.
 
 ```bash
-python main.py
+python data_prepare.py \
+    --rows 200000 \
+    --out_dir data_cache_v2 \
+    --min_zh_ratio 0.2
+# or
+python data_prepare.py --config configs/cci3.yaml
 ```
 
----
+### 2. Tokenize & Split
 
-### 2. Inference with the Public Model
+```bash
+python tokenizer_util.py \
+  --input fineweb.parquet \
+  --out_dir data_cache_v2 \
+  --model ckiplab/bert-base-chinese \
+  --max_len 256 --stride 128 --test_size 0.2
+```
 
-You can **directly use the public model on Hugging Face**:
+### 3. Train the Model
+
+```bash
+python train.py -d data_cache_v2 -o ckpt --rows 5000 \
+  --project myproj --run debug-5k
+```
+
+### 4. Evaluate & Inference
+
+Run `evaluate.py` or `test_inference.py` for reporting and prediction demos.
+
+### 5. Upload to Hugging Face
 
 ```python
-from transformers import pipeline
-
-classifier = pipeline(
-    "text-classification",
-    model="renhehuang/bert-base-chinese-traditional-classifier-v3",
-    tokenizer="renhehuang/bert-base-chinese-traditional-classifier-v3"
-)
-print(classifier("你好中國"))
+from src.push_to_hub import push_model
+push_model(repo_id="renhehuang/bert-base-chinese-traditional-classifier-v3", model_dir="./model_ckpt")
 ```
-- Output example:
-    ```
-    [{'label': 'LABEL_1', 'score': 0.997...}]
-    ```
-    - `LABEL_0`: Simplified
-    - `LABEL_1`: Traditional
-    - `LABEL_2`: Hybrid
 
----
-
-### 3. Uploading Your Own Model to Hugging Face
-
-After training, push to Hugging Face with:
-
-```python
-from src.upload_hf import upload_to_hf
-
-upload_to_hf(
-    model_dir="./model_ckpt",
-    repo_id="renhehuang/bert-base-chinese-traditional-classifier-v3",
-    private=False
-)
-```
-- You can then see and share your model at:  
-  [https://huggingface.co/renhehuang/bert-base-chinese-traditional-classifier-v3](https://huggingface.co/renhehuang/bert-base-chinese-traditional-classifier-v3)
-
----
-
-## Dataset Preparation Details
-
-- **sample_streaming**: Efficient sampling from huge datasets (streaming mode)
-- **sample_unique_streaming**: No overlap between category samples
-- **random_hybrid_segments_distributed**: Robust hybrid (mixed) data synthesis
-- **split_long_text**: Chunk long texts to fit model input
-- **prepare_dataset**: Integrates above for one-click dataset prep
-
----
-
-## Model Training & Customization
-
-- Based on [ckiplab/bert-base-chinese](https://huggingface.co/ckiplab/bert-base-chinese)
-- Three-way classification:  
-    - `label=0`: Simplified  
-    - `label=1`: Traditional  
-    - `label=2`: Hybrid  
-- Training parameters fully customizable in `TextClassifierPipeline`
-
----
-
-## Visualization & Error Analysis
-
-- Prints classification report and confusion matrix
-- Displays class-wise error statistics for targeted improvement
-- Automatic CJK font detection for matplotlib visualizations
-
----
-
-## Requirements
-
-- `transformers`
-- `datasets`
-- `scikit-learn`
-- `numpy`
-- `pandas`
-- `matplotlib`
-- `seaborn`
-- `opencc`
-- `huggingface_hub`
-
-See `requirements.txt` for details.
-
----
-
-## License
-
-MIT License
-
----
