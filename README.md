@@ -91,3 +91,47 @@ push_model(repo_id="renhehuang/bert-base-chinese-traditional-classifier-v3", mod
 Open `bert_test_notebook.ipynb` to run through the full pipeline in a Jupyter environment.
 Or you can just go to the Colab and [try the pipeline.](https://colab.research.google.com/drive/1OSF3l-n60sHW0Z0kuwEpD_0zjKXxOk3Q?usp=sharing)
 
+---
+
+## CLI Argument Overview
+
+The main scripts expose flexible command‑line flags via `argparse`. Below is
+an overview of the available options for each entry point.
+
+### `data_prepare.py`
+
+- `--config` – YAML/JSON config file overriding defaults
+- `--rows` – number of rows to sample from the sources
+- `--out_dir` – output directory for the generated dataset
+- `--out_name` – filename of the saved parquet (auto‑generated when omitted)
+- `--min_len` – minimum text length after cleaning
+- `--min_zh_ratio` – minimum Chinese character ratio
+- `--max_tok` – maximum tokens per chunk
+- `--tokenizer_name` – HF tokenizer to use for length checks
+- `--sources` – inline JSON list to override dataset sources
+
+### `tokenizer_util.py`
+
+- `--input`/`-i` – path to Parquet/CSV or saved dataset directory
+- `--out_dir`/`-o` – where to save the encoded `DatasetDict`
+- `--model` – tokenizer model name
+- `--max_len` – maximum sequence length
+- `--stride` – stride size for overflow windows
+- `--test_size` – validation split ratio
+- `--no_raw` – skip saving raw train/val parquet files
+
+### `train.py`
+
+- `-d`, `--dataset_dir` – path to a tokenized `DatasetDict`
+- `-o`, `--output_dir` – directory for checkpoints and outputs
+- `--rows` – sample subset size (`N` or `start-end`)
+- `--num_labels` – number of classification labels
+- `--batch_size` – per-device batch size
+- `--grad_accum` – gradient accumulation steps
+- `--epochs` – total training epochs
+- `--early_stop` – early stopping patience
+- `--project` – Weights & Biases project name
+- `--run` – Weights & Biases run name
+- `--no_wandb` – disable Weights & Biases logging
+- `--model` – pretrained model to fine‑tune
+
