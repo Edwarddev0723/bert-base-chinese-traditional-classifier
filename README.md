@@ -10,6 +10,7 @@ A modular pipeline for labeling Chinese text as **Simplified**, **Traditional**,
 - **Tokenization & train/val split utility** (`tokenizer_util.py`)
 - **Robust BERT training CLI** (`train.py`)
 - Evaluation and inference helpers
+- **Interactive notebook demo** (`bert_test_notebook.ipynb`)
 
 ---
 
@@ -26,6 +27,7 @@ bert-base-chinese-traditional-classifier/
 │   ├── push_to_hub.py
 │   └── test_inference.py
 ├── requirements.txt
+├── bert_test_notebook.ipynb
 └── README.md
 ```
 
@@ -83,4 +85,8 @@ Run `evaluate.py` or `test_inference.py` for reporting and prediction demos.
 from src.push_to_hub import push_model
 push_model(repo_id="renhehuang/bert-base-chinese-traditional-classifier-v3", model_dir="./model_ckpt")
 ```
+
+### 6. Interactive Notebook
+
+Open `bert_test_notebook.ipynb` to run through the full pipeline in a Jupyter environment.
 
