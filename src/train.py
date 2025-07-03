@@ -40,8 +40,9 @@ from transformers import (
     DataCollatorWithPadding,
     Trainer,
     TrainingArguments,
+    EarlyStoppingCallback,
 )
-
+from sklearn.metrics import accuracy_score, f1_score
 try:
     import wandb
 except ImportError:
@@ -53,6 +54,14 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+
+def compute_metrics(eval_pred):
+    """Compute accuracy and weighted F1 for evaluation."""
+    logits, labels = eval_pred
+    preds = logits.argmax(axis=1)
+    acc = accuracy_score(labels, preds)
+    f1 = f1_score(labels, preds, average="weighted")
+    return {"accuracy": acc, "f1": f1}
 
 # ---------------------------------------------------------------------------
 # TrainingArguments 建構器 – 版本兼容且策略一致
@@ -85,8 +94,8 @@ def build_training_args(
         "logging_steps": max(1, steps_per_epoch // 10),
         "save_strategy": "epoch",
         "load_best_model_at_end": True,
-        "metric_for_best_model": "eval_loss",
-        "greater_is_better": False,
+        "metric_for_best_model": "eval_f1",
+        "greater_is_better": True,
         "fp16": True,
         "seed": 42,
         "dataloader_num_workers": 4,
@@ -130,8 +139,6 @@ class BertTrainer:
             gradient_checkpointing=True,
         )
         
-        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-        
         num_train_rows = len(ds_dict["train"])
         steps_per_epoch = math.ceil(num_train_rows / (self.args.batch_size * self.args.grad_accum))
         total_train_steps = steps_per_epoch * self.args.epochs
@@ -147,6 +154,15 @@ class BertTrainer:
             use_wandb=self.use_wandb,
         )
 
+        data_collator = DataCollatorWithPadding(
+            tokenizer=tokenizer,
+            pad_to_multiple_of=8 if training_args.fp16 else None,
+        )
+
+        callbacks = []
+        if self.args.early_stop:
+            callbacks.append(EarlyStoppingCallback(early_stopping_patience=self.args.early_stop))
+
         trainer = Trainer(
             model=model,
             args=training_args,
@@ -154,6 +170,8 @@ class BertTrainer:
             eval_dataset=ds_dict["validation"],
             tokenizer=tokenizer,
             data_collator=data_collator,
+            compute_metrics=compute_metrics,
+            callbacks=callbacks,
         )
         
         logging.info("開始模型訓練...")
@@ -254,6 +272,7 @@ def main():
     p.add_argument("--batch_size", type=int, default=32, help="每個設備的訓練批次大小")
     p.add_argument("--grad_accum", type=int, default=2, help="梯度累積步數")
     p.add_argument("--epochs", type=int, default=3, help="總訓練輪數")
+    p.add_argument("--early_stop", type=int, default=None, help="早停耐心值 (若為0或未設置則停用)")
     p.add_argument("--project", default="bert-project", help="Weights & Biases 的專案名稱")
     p.add_argument("--run", default="run-1", help="Weights & Biases 的運行名稱")
     p.add_argument("--no_wandb", action="store_true", help="停用 Weights & Biases 日誌記錄")
