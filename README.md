@@ -89,4 +89,5 @@ push_model(repo_id="renhehuang/bert-base-chinese-traditional-classifier-v3", mod
 ### 6. Interactive Notebook
 
 Open `bert_test_notebook.ipynb` to run through the full pipeline in a Jupyter environment.
+Or you can just go to the Colab and [try the pipeline.](https://colab.research.google.com/drive/1OSF3l-n60sHW0Z0kuwEpD_0zjKXxOk3Q?usp=sharing)
 
