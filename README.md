@@ -45,6 +45,13 @@ pip install -r requirements.txt
 
 ## Quick Start
 
+First, log into your Hugging Face and Weights and Biases accounts as follows:
+
+```shell
+huggingface-cli login
+wandb login
+```
+
 ### 1. Build the Dataset
 
 Use the parameter driven dataset builder. CLI flags or a YAML/JSON config may override any hyper‑parameter.
