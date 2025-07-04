@@ -30,16 +30,17 @@ bert-base-chinese-traditional-classifier/
 ├── bert_test_notebook.ipynb
 └── README.md
 ```
-## 腳本設計細節
 
-各個腳本皆保持單一責任，可獨立透過 CLI 執行：
+## Script Design Details
 
-- **data_prepare.py** – 依據配置抽取並清理資料，輸出 Parquet 檔。
-- **tokenizer_util.py** – 將文本編碼為 `datasets.DatasetDict` 並切分 train/val。
-- **train.py** – 使用 Hugging Face `Trainer` 進行微調，整合 W&B 紀錄。
-- **evaluate.py** – 產生分類報告與混淆矩陣。
-- **test_inference.py** – 隨機產生樣本並驗證模型預測。
-- **push_to_hub.py** – 將訓練後模型上傳到 Hugging Face Hub。
+Each script follows the single-responsibility principle and can be run independently via the CLI:
+
+- **data_prepare.py** – Extracts and cleans data based on the config, outputting a Parquet file.
+- **tokenizer_util.py** – Encodes text into a datasets.DatasetDict and splits it into train/val sets.
+- **train.py** – Fine-tunes the model with Hugging Face Trainer and logs results to W&B.
+- **evaluate.py** – Produces a classification report and confusion matrix.
+- **test_inference.py** – Generates random samples and validates model predictions.
+- **push_to_hub.py** –  Uploads the trained model to the Hugging Face Hub.
 
 ![](assets/plan.jpg)
 ---
